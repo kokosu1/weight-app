@@ -450,7 +450,7 @@ function vSettings(){
     '<label class="linkbtn" style="border-top:1px solid var(--line2);cursor:pointer">CSVから読み込み<span class="muted">›</span><input type="file" accept=".csv,text/csv,text/plain" data-act="import" class="vh"></label>'+
     '</div>';
   if(S.csv)h+='<div class="card" style="padding:12px;display:flex;flex-direction:column;gap:8px"><span style="font-size:13px" class="muted">ダウンロードできない環境のため、内容を表示しています。</span><textarea class="csv" readonly aria-label="CSVデータ">'+esc(S.csv)+'</textarea><button type="button" class="primary" style="height:44px;font-size:14px" data-act="copycsv">コピー</button></div>';
-  h+='<p class="muted" style="margin:6px 4px 0;font-size:12px;line-height:1.6">'+'記録はこの端末の中だけに保存されます。機種変更やブラウザのデータ削除に備えて、ときどきCSVで書き出しておくと安心です。'+'</p></section>';
+  h+='<p class="muted" style="margin:6px 4px 0;font-size:12px;line-height:1.6">'+'記録はこの端末の中だけに保存されます。機種変更やブラウザのデータ削除に備えて、ときどきCSVで書き出しておくと安心です。'+'</p><p class="muted" style="margin:10px 4px 0;font-size:11px">バージョン 1.1</p></section>';
   return h;
 }
 
@@ -571,6 +571,7 @@ view.addEventListener('change',function(e){
   putSettings();toast('保存しました');
 });
 view.addEventListener('focusout',function(){setTimeout(function(){if(pending)render();},0);});
+document.addEventListener('touchmove',function(e){if(S.tab==='today'&&!E.open)e.preventDefault();},{passive:false});
 window.addEventListener('resize',function(){if(S.tab==='graph')drawChart();});
 
 function csvText(){
