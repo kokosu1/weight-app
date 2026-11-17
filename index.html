@@ -50,8 +50,10 @@ a{color:var(--acc)}a:hover{color:#115E59}
 .note{margin:0 16px 14px;padding:12px 14px;border-radius:14px;background:var(--up-soft);color:#7C2D12;font-size:13px;line-height:1.5}
 
 /* today */
-.today{display:flex;flex-direction:column;min-height:calc(100vh - 96px - env(safe-area-inset-bottom))}
-.hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px}
+.today{display:flex;flex-direction:column;height:100vh;height:100dvh;padding-bottom:calc(76px + env(safe-area-inset-bottom));overflow:hidden}
+#view.t-today{padding-bottom:0}
+html.t-today,html.t-today body{overflow:hidden;overscroll-behavior:none}
+.hero{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:8px 24px}
 .big{display:flex;align-items:baseline;gap:6px}
 .big .n{font-size:104px;line-height:1;font-weight:600;letter-spacing:-4px}
 .big .k{font-size:26px;font-weight:500;color:var(--mute)}
@@ -458,6 +460,7 @@ function render(){
   if(S.tab==='settings'&&lastTab==='settings'&&ae&&ae.tagName==='INPUT'&&view.contains(ae)){pending=true;return;}
   pending=false;
   var y=window.scrollY;
+  view.classList.toggle('t-today',S.tab==='today');document.documentElement.classList.toggle('t-today',S.tab==='today');
   view.innerHTML=S.tab==='today'?vToday():S.tab==='graph'?vGraph():S.tab==='history'?vHistory():vSettings();
   if(S.tab==='graph')drawChart();
   if(lastTab===S.tab)window.scrollTo(0,y);else window.scrollTo(0,0);
