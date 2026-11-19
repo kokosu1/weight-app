@@ -197,9 +197,20 @@ function sanitize(v,id){var r={date:id,weightKg:Number(v.weightKg)};
   r.recordedAt=Number(v.recordedAt)||0;r.updatedAt=Number(v.updatedAt)||0;return r;}
 
 /* ---------- storage ---------- */
-var LS='weightlog.v1', profileRef=null, recCol=null, chains={};
-function loadLocal(){try{var j=JSON.parse(localStorage.getItem(LS)||'null');if(j){var r={};for(var k in (j.records||{})){var v=j.records[k];if(v&&isFinite(v.weightKg))r[k]=sanitize(v,k);}S.records=r;S.settings=Object.assign({},DEFAULTS,j.settings||{});}}catch(e){}}
-function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({records:S.records,settings:S.settings}));}catch(e){}}
+var LS='weightlog.v1', LS2='weightlog.v2', profileRef=null, recCol=null, chains={};
+var P={profiles:[{id:'p1',name:'1人目'}],active:'p1',data:{p1:{records:{},settings:Object.assign({},DEFAULTS)}}};
+function bind(){var d=P.data[P.active];S.records=d.records;S.settings=d.settings;}
+function pname(id){var p=P.profiles.filter(function(x){return x.id===(id||P.active);})[0];return p?p.name:'';}
+function multi(){return P.profiles.length>1;}
+function switchTo(id){if(!P.data[id])return;P.active=id;bind();saveLocal();render();}
+function cleanRecs(o){var r={};for(var k in (o||{})){var v=o[k];if(v&&isFinite(v.weightKg))r[k]=sanitize(v,k);}return r;}
+function loadLocal(){try{
+  var j2=JSON.parse(localStorage.getItem(LS2)||'null');
+  if(j2&&j2.profiles&&j2.profiles.length){var data={};j2.profiles.forEach(function(p){var d=(j2.data||{})[p.id]||{};data[p.id]={records:cleanRecs(d.records),settings:Object.assign({},DEFAULTS,d.settings||{})};});
+    P={profiles:j2.profiles.map(function(p){return {id:String(p.id),name:String(p.name||'').slice(0,12)||'名前なし'};}),active:data[j2.active]?j2.active:j2.profiles[0].id,data:data};}
+  else{var j=JSON.parse(localStorage.getItem(LS)||'null');if(j){P.data.p1={records:cleanRecs(j.records),settings:Object.assign({},DEFAULTS,j.settings||{})};}}
+}catch(e){}bind();}
+function saveLocal(){try{localStorage.setItem(LS2,JSON.stringify(P));}catch(e){}}
 function serial(key,fn){var p=(chains[key]||Promise.resolve()).then(fn,fn);chains[key]=p.catch(function(){});return p;}
 function writeErr(e){var c=e&&e.code;toast(c==='quota_exceeded'?'保存容量がいっぱいです':'保存できませんでした。通信を確認してください');}
 function putRecord(rec){S.records[rec.date]=rec;render();
@@ -266,10 +277,13 @@ function diffPill(rec){
 }
 
 /* ---------- views ---------- */
+function whoBar(){if(!multi())return '';
+  return '<div style="padding:0 16px 12px"><div class="seg" role="group" aria-label="記録する人" style="display:flex">'+P.profiles.map(function(p){
+    return '<button type="button" style="flex:1;min-height:40px;font-size:14px" data-act="who" data-v="'+esc(p.id)+'" aria-pressed="'+(p.id===P.active)+'">'+esc(p.name)+'</button>';}).join('')+'</div></div>';}
 function vToday(){
   var t=today(),d=parse(t),rec=S.records[t],last=prevOf(addDays(t,1)),st=streak();
   var h='<div class="today"><header class="hdr"><div style="display:flex;flex-direction:column;gap:2px"><span class="muted" style="font-size:13px">'+d.getFullYear()+'年</span><span style="font-size:20px;font-weight:700">'+(d.getMonth()+1)+'月'+d.getDate()+'日（'+DOW[d.getDay()]+'）</span></div>'+
-    (st>0?'<span class="chip">'+ICON.flame+'連続 '+st+'日</span>':'')+'</header>';
+    (st>0?'<span class="chip">'+ICON.flame+'連続 '+st+'日</span>':'')+'</header>'+whoBar();
   if(S.note)h+='<p class="note">'+esc(S.note)+'</p>';
   h+='<section class="hero">';
   if(rec){
@@ -295,7 +309,7 @@ function vToday(){
       '<div class="stat"><span class="l">7日平均</span><span class="v num">'+(a?f1(a)+'<span class="u"> kg</span>':'—')+'</span></div>'+
       '<div class="stat"><span class="l">BMI</span><span class="v num">'+(b?f1(b):'<span class="u">身長未設定</span>')+'</span></div></section>';
   }
-  h+='<div style="padding:0 20px 20px"><button type="button" class="primary" data-act="open" data-date="'+t+'">'+(rec?ICON.pen+'今日の記録を編集':ICON.plus+'今日の体重を記録')+'</button></div></div>';
+  h+='<div style="padding:0 20px 20px"><button type="button" class="primary" data-act="open" data-date="'+t+'">'+(rec?ICON.pen+(multi()?esc(pname())+'の記録を編集':'今日の記録を編集'):ICON.plus+(multi()?esc(pname())+'の体重を記録':'今日の体重を記録'))+'</button></div></div>';
   return h;
 }
 
@@ -317,7 +331,7 @@ function regression(){ // kg/day over last 14 days
 function vGraph(){
   var g=S.graph,unit=g.metric==='fat'?'%':(g.metric==='bmi'?'':' kg');
   var h='<header class="hdr"><h1>グラフ</h1><div class="seg" role="group" aria-label="表示する値">'+
-    [['weight','体重'],['fat','体脂肪'],['bmi','BMI']].map(function(m){return '<button type="button" data-act="metric" data-v="'+m[0]+'" aria-pressed="'+(g.metric===m[0])+'">'+m[1]+'</button>';}).join('')+'</div></header>';
+    [['weight','体重'],['fat','体脂肪'],['bmi','BMI']].map(function(m){return '<button type="button" data-act="metric" data-v="'+m[0]+'" aria-pressed="'+(g.metric===m[0])+'">'+m[1]+'</button>';}).join('')+'</div></header>'+whoBar();
   h+='<div class="pills" role="group" aria-label="期間">'+RANGES.map(function(r){return '<button type="button" data-act="range" data-v="'+r[0]+'" aria-pressed="'+(g.range===r[0])+'">'+r[1]+'</button>';}).join('')+'</div>';
   if(S.note)h+='<p class="note">'+esc(S.note)+'</p>';
   var D=graphData(),p=D.pts;
@@ -395,7 +409,7 @@ function vHistory(){
   var H=S.hist,ym=H.month,y=+ym.slice(0,4),m=+ym.slice(5,7),t=today(),curYm=t.slice(0,7);
   var h='<header class="hdr"><h1>履歴</h1><div class="seg" role="group" aria-label="表示切替">'+
     '<button type="button" data-act="hmode" data-v="list" aria-pressed="'+(H.mode==='list')+'">リスト</button>'+
-    '<button type="button" data-act="hmode" data-v="cal" aria-pressed="'+(H.mode==='cal')+'">カレンダー</button></div></header>';
+    '<button type="button" data-act="hmode" data-v="cal" aria-pressed="'+(H.mode==='cal')+'">カレンダー</button></div></header>'+whoBar();
   h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:0 12px 12px">'+
     '<button type="button" class="round" style="border:none;background:none" data-act="month" data-v="-1" aria-label="前の月">'+ICON.left+'</button>'+
     '<span style="font-size:16px;font-weight:700">'+y+'年'+m+'月</span>'+
@@ -428,7 +442,7 @@ function vHistory(){
 
 function vSettings(){
   var s=S.settings,st=startWeight(),cur=sorted().slice(-1)[0],g=s.goalWeightKg;
-  var h='<header class="hdr"><h1>設定</h1></header>';
+  var h='<header class="hdr"><h1>設定</h1></header>'+whoBar();
   if(g&&st&&cur&&Math.abs(st-g)>0.01){
     var pct=Math.max(0,Math.min(100,Math.round((st-cur.weightKg)/(st-g)*100)));
     var left=Math.abs(cur.weightKg-g);
@@ -436,6 +450,11 @@ function vSettings(){
       '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:15px;font-weight:700">目標</span><span class="muted num" style="font-size:13px">開始 '+f1(st)+'kg → 目標 '+f1(g)+'kg</span></div>'+
       '<div class="prog"><div style="width:'+pct+'%"></div></div><span class="num" style="font-size:13px;color:var(--ink2)">'+pct+'% 達成'+(pct>=100?'':'・あと '+f1(left)+'kg')+'</span></section></div>';
   }
+  h+='<section class="sec"><h2>記録する人</h2><div class="card sgroup">'+P.profiles.map(function(p,i){
+    return '<div class="srow"><label for="pn-'+i+'" class="vh">'+(i+1)+'人目の名前</label><input id="pn-'+i+'" type="text" maxlength="12" data-pname="'+esc(p.id)+'" value="'+esc(p.name)+'" style="flex:1;width:auto;text-align:left">'+
+      (multi()?'<button type="button" class="danger" style="padding:0 4px;white-space:nowrap" data-act="delp" data-v="'+esc(p.id)+'">'+(S.delP===p.id?'もう一度で削除':'削除')+'</button>':'')+'</div>';}).join('')+
+    (P.profiles.length<6?'<button type="button" class="linkbtn" style="border-top:1px solid var(--line2);color:var(--acc);font-weight:600" data-act="addp">＋ 人を追加</button>':'')+
+    '</div>'+(multi()?'<p class="muted" style="margin:4px 4px 0;font-size:12px">下の設定は「'+esc(pname())+'」の分です。上で人を切り替えられます。</p>':'')+'</section>';
   h+='<section class="sec"><h2>からだ・目標</h2><div class="card sgroup">'+
     '<div class="srow"><label for="i-goal">目標体重</label><span class="unitwrap"><input id="i-goal" class="num" type="number" inputmode="decimal" step="0.1" min="20" max="300" data-set="goalWeightKg" value="'+(g||'')+'" placeholder="未設定">kg</span></div>'+
     '<div class="srow"><label for="i-gdate">目標日</label><input id="i-gdate" type="date" data-set="goalDate" value="'+esc(s.goalDate||'')+'"></div>'+
@@ -450,7 +469,7 @@ function vSettings(){
     '<label class="linkbtn" style="border-top:1px solid var(--line2);cursor:pointer">CSVから読み込み<span class="muted">›</span><input type="file" accept=".csv,text/csv,text/plain" data-act="import" class="vh"></label>'+
     '</div>';
   if(S.csv)h+='<div class="card" style="padding:12px;display:flex;flex-direction:column;gap:8px"><span style="font-size:13px" class="muted">ダウンロードできない環境のため、内容を表示しています。</span><textarea class="csv" readonly aria-label="CSVデータ">'+esc(S.csv)+'</textarea><button type="button" class="primary" style="height:44px;font-size:14px" data-act="copycsv">コピー</button></div>';
-  h+='<p class="muted" style="margin:6px 4px 0;font-size:12px;line-height:1.6">'+'記録はこの端末の中だけに保存されます。機種変更やブラウザのデータ削除に備えて、ときどきCSVで書き出しておくと安心です。'+'</p><p class="muted" style="margin:10px 4px 0;font-size:11px">バージョン 1.1</p></section>';
+  h+='<p class="muted" style="margin:6px 4px 0;font-size:12px;line-height:1.6">'+'記録はこの端末の中だけに保存されます。機種変更やブラウザのデータ削除に備えて、ときどきCSVで書き出しておくと安心です。'+'</p><p class="muted" style="margin:10px 4px 0;font-size:11px">バージョン 1.2</p></section>';
   return h;
 }
 
@@ -493,7 +512,7 @@ function sheetHint(){
 function renderSheet(focus){
   var sh=document.getElementById('sheet'),v=curVal(),ok=v!=null&&v>=20&&v<=300,hint=sheetHint(),t=today();
   var disp=E.buf!==''?esc(E.buf):(E.base?'<span style="color:#C7CCC8">'+f1(E.base)+'</span>':'<span style="color:#C7CCC8">--.-</span>');
-  var h='<div class="grab"></div><div class="shd"><button type="button" class="txtbtn" data-sact="close">キャンセル</button><span class="t" id="sheet-title">'+(E.existed?'記録を編集':'体重を記録')+'</span>'+
+  var h='<div class="grab"></div><div class="shd"><button type="button" class="txtbtn" data-sact="close">キャンセル</button><span class="t" id="sheet-title">'+(multi()?esc(pname())+'の':'')+(E.existed?'記録を編集':'体重を記録')+'</span>'+
     '<label class="vh" for="s-date">日付</label><input id="s-date" class="datein" type="date" max="'+t+'" value="'+E.date+'"></div>'+
     '<div class="disp"><button type="button" class="round" data-sact="dec" aria-label="0.1kg 減らす">'+ICON.minus+'</button>'+
     '<div class="dval"><div class="big"><span class="n num" aria-live="polite">'+disp+'</span><span class="k">kg</span></div><span class="hint" style="color:'+hint.c+'">'+esc(hint.t)+'</span></div>'+
@@ -523,7 +542,7 @@ function save(){
   var memo=(document.getElementById('s-memo')||{}).value;if(memo&&memo.trim())rec.memo=memo.trim().slice(0,100);
   var fe=document.getElementById('s-fat');if(fe){var f=num(fe.value);if(f!=null&&f>=3&&f<=70)rec.bodyFatPct=r1(f);}
   else{var old=S.records[E.date];if(old&&typeof old.bodyFatPct==='number')rec.bodyFatPct=old.bodyFatPct;}
-  closeSheet();putRecord(rec);toast(md(rec.date)+' '+f1(rec.weightKg)+'kg を保存しました');
+  closeSheet();putRecord(rec);toast((multi()?pname()+'：':'')+md(rec.date)+' '+f1(rec.weightKg)+'kg を保存しました');
 }
 function onKey(e){
   if(!E.open)return;var tg=e.target&&e.target.tagName;if(tg==='INPUT')return;
@@ -560,11 +579,19 @@ view.addEventListener('click',function(e){
   else if(a==='hmode'){S.hist.mode=v;render();}
   else if(a==='month'){var y=+S.hist.month.slice(0,4),m=+S.hist.month.slice(5,7)-1+Number(v);var d=new Date(y,m,1);var ym=d.getFullYear()+'-'+pad(d.getMonth()+1);if(ym<=today().slice(0,7)){S.hist.month=ym;render();}}
   else if(a==='bf'){S.settings.bodyFat=!S.settings.bodyFat;putSettings();}
+  else if(a==='who'){S.delP=null;switchTo(v);toast(pname()+' に切り替えました');}
+  else if(a==='addp'){var id='p'+Date.now().toString(36);P.profiles.push({id:id,name:(P.profiles.length+1)+'人目'});P.data[id]={records:{},settings:Object.assign({},DEFAULTS)};S.delP=null;switchTo(id);
+    setTimeout(function(){var el=document.querySelector('[data-pname="'+id+'"]');if(el){el.focus();el.select();}},50);}
+  else if(a==='delp'){if(S.delP!==v){S.delP=v;render();return;}
+    var nm=pname(v);P.profiles=P.profiles.filter(function(x){return x.id!==v;});delete P.data[v];S.delP=null;
+    if(P.active===v)P.active=P.profiles[0].id;bind();saveLocal();render();toast(nm+' を削除しました');}
   else if(a==='csv')exportCsv();
   else if(a==='copycsv'){try{navigator.clipboard.writeText(S.csv).then(function(){toast('コピーしました');},function(){toast('コピーできませんでした。長押しで選択してください');});}catch(err){toast('コピーできませんでした');}}
 });
 view.addEventListener('change',function(e){
   if(e.target.dataset&&e.target.dataset.act==='import'){var f=e.target.files&&e.target.files[0];if(f)importCsv(f);e.target.value='';return;}
+  var pid=e.target.dataset&&e.target.dataset.pname;
+  if(pid){var nm=e.target.value.trim().slice(0,12);P.profiles.forEach(function(p){if(p.id===pid&&nm)p.name=nm;});saveLocal();render();toast('名前を変えました');return;}
   var k=e.target.dataset&&e.target.dataset.set;if(!k)return;var val=e.target.value;
   if(k==='goalDate')S.settings.goalDate=val||'';
   else{var n=num(val);var lim=k==='heightCm'?[80,250]:[20,300];S.settings[k]=(n!=null&&n>=lim[0]&&n<=lim[1])?r1(n):null;}
@@ -580,7 +607,7 @@ function csvText(){
 }
 function exportCsv(){
   if(!Object.keys(S.records).length){toast('まだ記録がありません');return;}
-  var txt=csvText(),name='weight-'+today()+'.csv';
+  var txt=csvText(),name='weight-'+(multi()?pname()+'-':'')+today()+'.csv';
   try{var blob=new Blob(['\ufeff'+txt],{type:'text/csv'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();
     setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1000);toast('書き出しました');}
   catch(e){S.csv=txt;render();}
